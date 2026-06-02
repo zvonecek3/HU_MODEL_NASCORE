@@ -55,3 +55,64 @@ No rows were classified as `x-sell` under the current CASE logic. This is techni
 - `SKP_CREDIT_TYPE = 3` and `NAME_SEGMENT_LEVEL_2 in ('Credit Card X-sell', 'Revolving Loan X-sell')`
 
 A follow-up check of actual `NAME_SEGMENT_LEVEL_2` values for credit types 2 and 3 is recommended before treating `credit_segment` as a meaningful feature.
+
+
+
+
+
+
+
+
+
+
+
+
+
+# STEP 3 – HU_model_con_sc
+
+## Účel kroku
+
+Krok vytváří agregovanou historii smluv pro klienty ze základní klientské báze `HU_model_basic_sc`.
+
+Výstupem je počet smluv klienta podle kombinace:
+
+- `SKP_CLIENT`
+- `CODE_CREDIT_STATUS`
+- `SKP_CREDIT_TYPE`
+- `CREDIT_SEGMENT`
+- `CODE_SEGMENTATION_ENVIRONMENT`
+- `CODE_SEGMENTATION_SALES_TYPE`
+- `CODE_SEGMENTATION_PROPOSITION`
+- `CODE_SEGMENTATION_PRODUCT`
+- `CODE_SEGMENTATION_OTHER`
+
+Výstup není unikátní podle `SKP_CLIENT`. Jeden klient může mít více řádků podle různých historických kombinací typu produktu, kreditního statusu a obchodní segmentace.
+
+## Výsledný grain
+
+Očekávaný grain tabulky:
+
+`SKP_CLIENT × CODE_CREDIT_STATUS × SKP_CREDIT_TYPE × CREDIT_SEGMENT × CODE_SEGMENTATION_ENVIRONMENT × CODE_SEGMENTATION_SALES_TYPE × CODE_SEGMENTATION_PROPOSITION × CODE_SEGMENTATION_PRODUCT × CODE_SEGMENTATION_OTHER`
+
+Tabulka tedy není klientská tabulka typu 1 řádek na klienta.
+
+Pokud se `HU_model_con_sc` v dalších krocích připojí pouze přes `SKP_CLIENT`, dojde k rozmnožení klientské báze.
+
+## Popis logiky
+
+1. Vezme klienty z `HU_model_basic_sc`.
+2. Připojí historické smlouvy z `owner_dwh.dc_contract`.
+3. Připojí aktuálně validní kreditní status z `owner_dwh.f_credit_status_tt`.
+4. Připojí číselník kreditního statusu `owner_dwh.cl_credit_status`.
+5. Připojí kreditní segmentaci z `owner_dwh.dc_credit_segmentation`.
+6. Připojí obchodní/ad segmentaci z `owner_dwh.f_contract_ad`.
+7. Připojí číselníky obchodní segmentace.
+8. Agreguje počet smluv do bucketů podle klienta, statusu, typu produktu a segmentace.
+
+## Časová logika
+
+Produkční kód používá `SYSDATE`:
+
+```sql
+where sysdate between s.DTIME_VALID_FROM and s.DTIME_VALID_TO
+  and c.DATE_DECISION < sysdate
